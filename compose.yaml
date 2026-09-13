@@ -1,0 +1,84 @@
+name: mindforge
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: mindforge
+      POSTGRES_USER: mindforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mindforge_local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindforge -d mindforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      target: api
+    environment:
+      DATABASE_URL: postgresql://mindforge:${POSTGRES_PASSWORD:-mindforge_local}@postgres:5432/mindforge?schema=public
+    command: ["sh", "-c", "npx prisma migrate deploy && npm run db:seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      NODE_ENV: ${APP_ENV:-development}
+      PORT: 3001
+      APP_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      DATABASE_URL: postgresql://mindforge:${POSTGRES_PASSWORD:-mindforge_local}@postgres:5432/mindforge?schema=public
+      MEMORY_DATABASE: "false"
+      ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-local-development-only-replace-with-a-random-secret}
+    expose:
+      - "3001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
+    restart: unless-stopped
+    init: true
+
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional reserved service. The API currently uses PostgreSQL directly and
+  # process-local rate limiting; starting Redis does not enable shared limits.
+  redis:
+    image: redis:7.4-alpine
+    profiles: ["cache"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

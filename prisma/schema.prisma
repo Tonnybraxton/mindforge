@@ -1,0 +1,374 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  role         String   @default("user")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastLogin    DateTime?
+  typingGoal TypingGoal?
+  typingRaces TypingRace[]
+  profile      Profile?
+  settings     UserSettings?
+  sessions     GameSession[]
+  refreshTokens RefreshToken[]
+  scores       GameScore[]
+  cognitiveScores CognitiveScore[]
+  achievements UserAchievement[]
+  badges       UserBadge[]
+  attempts     ChallengeAttempt[]
+  campaign     CampaignProgress[]
+  leaderboard  LeaderboardEntry[]
+  sentRequests Friendship[] @relation("requester")
+  receivedRequests Friendship[] @relation("recipient")
+  sentChallenges FriendChallenge[] @relation("challenger")
+  receivedChallenges FriendChallenge[] @relation("challenged")
+  notifications Notification[]
+  streak       Streak?
+  rewards      Reward[]
+  inventory    UserInventory[]
+}
+
+model RefreshToken {
+  hash      String @id
+  userId    String
+  family    String
+  expiresAt DateTime
+  revoked   Boolean @default(false)
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([family])
+  @@index([expiresAt])
+}
+
+model Profile {
+  id            String @id @default(uuid())
+  userId        String @unique
+  avatar        String @default("spark")
+  level         Int @default(1)
+  xp            Int @default(0)
+  coins         Int @default(0)
+  rank          String @default("Curious Mind")
+  brainScore    Int @default(0)
+  totalGames    Int @default(0)
+  totalPlayTime Float @default(0)
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  id            String @id @default(uuid())
+  userId        String @unique
+  theme         String @default("dark")
+  sound         Boolean @default(true)
+  volume        Float @default(0.5)
+  reducedMotion Boolean @default(false)
+  highContrast  Boolean @default(false)
+  largeText     Boolean @default(false)
+  colorBlind    Boolean @default(false)
+  privacy       String @default("private")
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GameDefinition {
+  id               String @id
+  slug             String @unique
+  name             String
+  category         String
+  description      String
+  enabled          Boolean @default(true)
+  generatorVersion Int @default(1)
+  sessions         GameSession[]
+  dailyChallenges  DailyChallenge[]
+  campaignLevels   CampaignLevel[]
+}
+
+model DifficultyDefinition {
+  id          Int @id
+  name        String
+  description String
+}
+
+model GameSession {
+  typingConfig Json?
+  id               String @id @default(uuid())
+  userId           String
+  gameId           String
+  difficulty       Int
+  seed             String
+  generatorVersion Int @default(1)
+  score            Int @default(0)
+  accuracy         Float @default(0)
+  mistakes         Int @default(0)
+  moves            Int @default(0)
+  hintsUsed        Int @default(0)
+  duration         Float @default(0)
+  xpEarned         Int @default(0)
+  completed        Boolean @default(false)
+  context          Json?
+  result           Json?
+  startedAt        DateTime @default(now())
+  completedAt      DateTime?
+  user             User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game             GameDefinition @relation(fields: [gameId], references: [id])
+  gameScore        GameScore?
+  challengeAttempt ChallengeAttempt?
+  rewards          Reward[]
+  @@index([userId, startedAt])
+  @@index([gameId, completedAt])
+}
+
+model GameScore {
+  id          String @id @default(uuid())
+  sessionId   String @unique
+  userId      String
+  slug        String
+  score       Int
+  accuracy    Float
+  verified    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([slug, score])
+  @@index([createdAt])
+}
+
+model CognitiveScore {
+  id        String @id @default(uuid())
+  userId    String
+  category  String
+  score     Float @default(0)
+  samples   Int @default(0)
+  updatedAt DateTime @updatedAt
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, category])
+}
+
+model Achievement {
+  id          String @id
+  name        String
+  description String
+  category    String
+  target      Int
+  xp          Int @default(0)
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  id            String @id @default(uuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  @@unique([userId, achievementId])
+}
+
+model Badge {
+  id          String @id
+  name        String
+  description String
+  users       UserBadge[]
+}
+
+model UserBadge {
+  id        String @id @default(uuid())
+  userId    String
+  badgeId   String
+  awardedAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     Badge @relation(fields: [badgeId], references: [id])
+  @@unique([userId, badgeId])
+}
+
+model DailyChallenge {
+  id               String @id
+  date             String @unique
+  gameId           String
+  seed             String
+  difficulty       Int
+  generatorVersion Int @default(1)
+  game             GameDefinition @relation(fields: [gameId], references: [id])
+  attempts         ChallengeAttempt[]
+}
+
+model ChallengeAttempt {
+  id          String @id @default(uuid())
+  userId      String
+  challengeId String
+  sessionId   String @unique
+  score       Int
+  completedAt DateTime @default(now())
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([userId, challengeId])
+}
+
+model CampaignWorld {
+  id          String @id
+  name        String
+  category    String
+  description String
+  position    Int @unique
+  levels      CampaignLevel[]
+}
+
+model CampaignLevel {
+  id               String @id
+  worldId          String
+  number           Int
+  gameId           String
+  seed             String
+  difficulty       Int
+  generatorVersion Int @default(1)
+  world            CampaignWorld @relation(fields: [worldId], references: [id])
+  game             GameDefinition @relation(fields: [gameId], references: [id])
+  progress         CampaignProgress[]
+  @@unique([worldId, number])
+}
+
+model CampaignProgress {
+  id          String @id @default(uuid())
+  userId      String
+  levelId     String
+  stars       Int @default(0)
+  bestScore   Int @default(0)
+  completedAt DateTime @default(now())
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level       CampaignLevel @relation(fields: [levelId], references: [id])
+  @@unique([userId, levelId])
+}
+
+model LeaderboardEntry {
+  id        String @id @default(uuid())
+  userId    String
+  scope     String
+  period    String
+  score     Int
+  updatedAt DateTime @updatedAt
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, scope, period])
+  @@index([scope, period, score])
+}
+
+model Friendship {
+  id          String @id @default(uuid())
+  pairKey     String @unique
+  requesterId String
+  recipientId String
+  status      String @default("pending")
+  createdAt   DateTime @default(now())
+  requester   User @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient   User @relation("recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  @@index([recipientId, status])
+}
+
+model FriendChallenge {
+  id           String @id @default(uuid())
+  challengerId String
+  challengedId String
+  slug         String
+  seed         String
+  difficulty   Int
+  status       String @default("pending")
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  challenger   User @relation("challenger", fields: [challengerId], references: [id], onDelete: Cascade)
+  challenged   User @relation("challenged", fields: [challengedId], references: [id], onDelete: Cascade)
+}
+
+// Reserved persistence contract; real-time matchmaking is not enabled by these records.
+model MultiplayerMatch {
+  id          String @id @default(uuid())
+  slug        String
+  seed        String
+  difficulty  Int
+  status      String @default("queued")
+  participants Json
+  results     Json?
+  createdAt   DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+}
+
+model Notification {
+  id        String @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt])
+}
+
+model Streak {
+  id          String @id @default(uuid())
+  userId      String @unique
+  current     Int @default(0)
+  longest     Int @default(0)
+  lastPlayDay String?
+  freezes     Int @default(0)
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Reward {
+  id        String @id @default(uuid())
+  userId    String
+  sessionId String?
+  source    String
+  sourceId  String
+  xp        Int @default(0)
+  coins     Int @default(0)
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session   GameSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([userId, source, sourceId])
+}
+
+model InventoryItem {
+  id          String @id
+  name        String
+  type        String
+  description String
+  price       Int @default(0)
+  users       UserInventory[]
+}
+
+model UserInventory {
+  id         String @id @default(uuid())
+  userId     String
+  itemId     String
+  quantity   Int @default(1)
+  acquiredAt DateTime @default(now())
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item       InventoryItem @relation(fields: [itemId], references: [id])
+  @@unique([userId, itemId])
+}
+
+model TypingGoal {
+  userId String @id
+  wpm Int @default(60)
+  accuracy Int @default(97)
+  minutes Int @default(10)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+model TypingRace {
+  id String @id
+  hostId String
+  data Json
+  createdAt DateTime @default(now())
+  host User @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  @@index([createdAt])
+}
